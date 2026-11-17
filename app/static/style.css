@@ -94,3 +94,29 @@ select {width:100%; height:39px; font:inherit; border:1px solid #bdc5ce; border-
 }
 
 .chart-legend span[hidden] { display:none; }
+
+/* v0.5: unobtrusive live preview controls that remain visible by the graph. */
+.legend-line.effective { border-color: #386c5d; border-top-style: dotted; border-top-width: 4px; }
+.preview-dock[hidden] { display: none; }
+.preview-dock {
+  position: fixed; z-index: 10; bottom: 14px; left: 50%;
+  transform: translateX(-50%); width: min(750px, calc(100% - 28px));
+  padding: 12px 16px 11px; border: 1px solid #cbd3d8;
+  border-radius: 8px; background: #fff;
+  box-shadow: 0 3px 17px rgba(29, 38, 48, .14);
+}
+.preview-dock-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.preview-dock-summary { display: flex; flex-direction: column; gap: 2px; min-width: 0; font-size: 13px; }
+.preview-dock-track { margin: 9px 0 0; }
+#preview-dock-fill { height: 100%; width: 0%; background: #957c4a; transition: width .4s linear; }
+.preview-active .shell { padding-bottom: 118px; }
+.preview-active .notice { bottom: 107px; }
+.device-tools { margin: 22px 0 0; padding-bottom: 0; border-bottom: 0; }
+.device-tools summary { font-size: 14px; }
+.device-tools .buttons { margin-bottom: 12px; }
+#daily-profile-panel { scroll-margin-top: 14px; }
+@media (max-width: 590px) {
+  .preview-dock { bottom: 8px; width: calc(100% - 16px); padding: 10px 12px; }
+  .preview-dock-summary { font-size: 12px; }
+  .preview-dock-heading button { flex-shrink: 0; }
+}

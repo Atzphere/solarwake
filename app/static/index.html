@@ -18,6 +18,48 @@
       <span id="phase-badge" class="status-chip">Loading</span>
     </header>
 
+    <section class="panel" id="daily-profile-panel" aria-labelledby="chart-title">
+      <div class="section-head chart-heading">
+        <div>
+          <h2 id="chart-title">Daily light profile</h2>
+          <p class="muted small">Planned output from the saved schedule, not measured illumination</p>
+        </div>
+        <div class="chart-date-tools">
+          <button type="button" id="chart-prev" aria-label="Previous day" title="Previous day">‹</button>
+          <label class="visually-hidden" for="chart-day">Chart date</label>
+          <input id="chart-day" type="date" aria-label="Chart date">
+          <button type="button" id="chart-next" aria-label="Next day" title="Next day">›</button>
+          <button type="button" id="chart-today" class="quiet">Today</button>
+        </div>
+      </div>
+      <div class="chart-frame">
+        <svg id="daily-chart" class="daily-chart" viewBox="0 0 840 310" role="img" aria-label="Daily light schedule brightness curve"></svg>
+      </div>
+      <div class="chart-legend">
+        <span><i class="legend-line artificial"></i> Requested brightness</span>
+        <span><i class="legend-line astronomical"></i> Actual sunrise</span>
+        <span><i class="legend-line clock"></i> Current time / virtual test time</span>
+      </div>
+      <p id="chart-readout" class="chart-readout muted small" role="status">Select a day to display its planned sunrise.</p>
+      <p id="chart-note" class="muted small">The graph uses saved settings. E80S brightness appears to have approximately 20 physical steps.</p>
+      <p id="chart-error" class="error small" hidden></p>
+    </section>
+    <section class="panel" aria-labelledby="upcoming-title">
+      <div class="section-head">
+        <h2 id="upcoming-title">Next sunrise</h2>
+        <button class="quiet" id="refresh" type="button">Refresh</button>
+      </div>
+      <dl class="schedule" id="schedule-values">
+        <div><dt>Ramp starts</dt><dd id="s-ramp">—</dd></div>
+        <div><dt>Artificial sunrise (full brightness)</dt><dd id="s-wake">—</dd></div>
+        <div><dt>Actual sunrise</dt><dd id="s-sunrise">—</dd></div>
+        <div><dt>Begin fade-out</dt><dd id="s-fade">—</dd></div>
+        <div><dt>Lights off</dt><dd id="s-end">—</dd></div>
+      </dl>
+      <p id="runtime-note" class="muted small">Checking schedule…</p>
+      <p id="error-note" class="error small" hidden></p>
+      <button id="skip" type="button" class="danger">Stop / skip this cycle</button>
+    </section>
     <section class="panel" aria-labelledby="schedule-title">
       <div class="section-head">
         <h2 id="schedule-title">Lighting schedule</h2>
@@ -127,34 +169,6 @@
         </div>
       </form>
     </section>
-
-    <section class="panel" aria-labelledby="chart-title">
-      <div class="section-head chart-heading">
-        <div>
-          <h2 id="chart-title">Daily light profile</h2>
-          <p class="muted small">Planned output from the saved schedule, not measured illumination</p>
-        </div>
-        <div class="chart-date-tools">
-          <button type="button" id="chart-prev" aria-label="Previous day" title="Previous day">‹</button>
-          <label class="visually-hidden" for="chart-day">Chart date</label>
-          <input id="chart-day" type="date" aria-label="Chart date">
-          <button type="button" id="chart-next" aria-label="Next day" title="Next day">›</button>
-          <button type="button" id="chart-today" class="quiet">Today</button>
-        </div>
-      </div>
-      <div class="chart-frame">
-        <svg id="daily-chart" class="daily-chart" viewBox="0 0 840 310" role="img" aria-label="Daily light schedule brightness curve"></svg>
-      </div>
-      <div class="chart-legend">
-        <span><i class="legend-line artificial"></i> Requested brightness</span>
-        <span><i class="legend-line astronomical"></i> Actual sunrise</span>
-        <span><i class="legend-line clock"></i> Current time / virtual test time</span>
-      </div>
-      <p id="chart-readout" class="chart-readout muted small" role="status">Select a day to display its planned sunrise.</p>
-      <p id="chart-note" class="muted small">The graph uses saved settings. E80S brightness appears to have approximately 20 physical steps.</p>
-      <p id="chart-error" class="error small" hidden></p>
-    </section>
-
     <section class="panel" aria-labelledby="annual-title">
       <div class="section-head chart-heading">
         <div>
@@ -177,30 +191,13 @@
       <div class="chart-legend">
         <span id="annual-real-legend"><i class="legend-line astronomical"></i> Real sunrise</span>
         <span id="annual-target-legend"><i class="legend-line artificial"></i> Artificial sunrise</span>
-        <span id="annual-advance-legend" hidden><i class="legend-line artificial"></i> Earlier (+) / later (−)</span>
+        <span id="annual-advance-legend" hidden><i class="legend-line artificial"></i> Target: earlier (+) / later (−)</span>
+        <span id="annual-effective-legend"><i class="legend-line effective"></i> <span id="annual-effective-label">Effective sunrise</span></span>
       </div>
       <p id="annual-readout" class="chart-readout muted small" role="status">Select an annual view.</p>
-      <p class="muted small">Control points are edited in Lighting schedule, above. This chart is a calculation only; it never turns on a light. Clock times use the selected location's timezone.</p>
+      <p class="muted small">Effective sunrise = the earlier of real sunrise and artificial full brightness. It represents timing, not measured room illumination. Edit control points in Lighting schedule; graph previews never operate the light.</p>
       <p id="annual-error" class="error small" hidden></p>
     </section>
-
-    <section class="panel" aria-labelledby="upcoming-title">
-      <div class="section-head">
-        <h2 id="upcoming-title">Next sunrise</h2>
-        <button class="quiet" id="refresh" type="button">Refresh</button>
-      </div>
-      <dl class="schedule" id="schedule-values">
-        <div><dt>Ramp starts</dt><dd id="s-ramp">—</dd></div>
-        <div><dt>Artificial sunrise (full brightness)</dt><dd id="s-wake">—</dd></div>
-        <div><dt>Actual sunrise</dt><dd id="s-sunrise">—</dd></div>
-        <div><dt>Begin fade-out</dt><dd id="s-fade">—</dd></div>
-        <div><dt>Lights off</dt><dd id="s-end">—</dd></div>
-      </dl>
-      <p id="runtime-note" class="muted small">Checking schedule…</p>
-      <p id="error-note" class="error small" hidden></p>
-      <button id="skip" type="button" class="danger">Stop / skip this cycle</button>
-    </section>
-
     <section class="panel" aria-labelledby="preview-title">
       <div class="section-head"><h2 id="preview-title">Accelerated test run</h2><span class="muted small">Uses current saved ramp and fade settings</span></div>
       <p class="muted small">Preview runs the ramp, a 2-minute simulated hold, then the fade. It does not change the saved lighting schedule or wait for real sunrise. On the daily graph, its playhead tracks a virtual clock along the plotted phases.</p>
@@ -213,21 +210,30 @@
       <p class="muted small">Live mode requires the lighting schedule to be disabled. At high speeds, device updates may be skipped, delayed, or appear abrupt. A stopped or completed preview attempts to restore the light's previous power and brightness. Unexpected behaviour is possible; keep the physical controls available.</p>
       <div class="buttons"><button id="preview-start" type="button" class="primary">Start preview</button><button id="preview-stop" type="button" disabled>Stop and restore</button></div>
       <p id="preview-error" class="error small" hidden></p>
-    </section>
-    <section class="panel" aria-labelledby="device-title">
-      <div class="section-head">
-        <h2 id="device-title">Device check</h2>
-        <span class="muted small">Available when schedule is disabled</span>
-      </div>
-      <p id="device-status" class="muted small">Device not checked.</p>
-      <div class="buttons">
-        <button id="check-device" type="button">Check connection</button>
-        <button id="test-on" type="button">Test light at 10%</button>
-        <button id="test-off" type="button">Turn light off</button>
-      </div>
+      <details class="device-tools" aria-labelledby="device-title">
+        <summary id="device-title">Device check <span class="muted small">· available when schedule is disabled</span></summary>
+        <p id="device-status" class="muted small">Device not checked.</p>
+        <div class="buttons">
+          <button id="check-device" type="button">Check connection</button>
+          <button id="test-on" type="button">Test light at 10%</button>
+          <button id="test-off" type="button">Turn light off</button>
+        </div>
+      </details>
     </section>
     <footer>Local-only control · Home Assistant handles device communication · No cloud service</footer>
   </main>
+  <aside id="preview-dock" class="preview-dock" aria-label="Active accelerated test" hidden>
+    <div class="preview-dock-heading">
+      <div class="preview-dock-summary">
+        <strong>Accelerated test</strong>
+        <span id="preview-dock-status" class="muted small">Starting…</span>
+      </div>
+      <button type="button" id="preview-dock-stop" class="danger">Stop and restore</button>
+    </div>
+    <div class="preview-track preview-dock-track" id="preview-dock-progress" role="progressbar" aria-label="Accelerated test progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+      <div id="preview-dock-fill"></div>
+    </div>
+  </aside>
   <div role="status" id="notice" class="notice" hidden></div>
 </body>
 </html>

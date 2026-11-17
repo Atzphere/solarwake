@@ -136,14 +136,20 @@ setInterval(refresh, 5000);
 async function updatePreview() {
   try {
     const p = await request("/api/preview");
-    const pct = p.total_seconds ? Math.round(100*p.elapsed_seconds/p.total_seconds) : 0;
+    const pct = p.total_seconds ? Math.max(0, Math.min(100, Math.round(100*p.elapsed_seconds/p.total_seconds))) : 0;
     $("preview-progress").setAttribute("aria-valuenow", pct);
+    $("preview-dock-progress").setAttribute("aria-valuenow", pct);
+    $("preview-dock-fill").style.width = `${pct}%`;
+    $("preview-dock").hidden = !p.active;
+    document.body.classList.toggle("preview-active", p.active);
+    $("preview-dock-status").textContent = `${p.phase} · ${pct}% complete · ${Math.round(p.brightness_pct)}% light${p.live ? " · live" : " · simulation"}`;
     $("preview-fill").style.width = `${pct}%`;
     $("preview-status").textContent = `${p.phase} · ${Math.round(p.brightness_pct)}% brightness · ${Math.round(p.elapsed_seconds)} / ${Math.round(p.total_seconds)} simulated seconds`;
     $("preview-error").hidden = !p.error;
     $("preview-error").textContent = p.error || "";
     $("preview-start").disabled = p.active;
     $("preview-stop").disabled = !p.active;
+    $("preview-dock-stop").disabled = !p.active;
     $("preview-speed").disabled = p.active;
     $("preview-live").disabled = p.active;
     $("test-on").disabled = p.active || currentSettings?.enabled;
@@ -158,14 +164,24 @@ $("preview-start").addEventListener("click", async () => {
   if (live && !confirm(`Drive the real light at ${speed}×? High speeds may cause abrupt or unexpected changes. The lighting schedule must be disabled.`)) return;
   try {
     await request("/api/preview/start", {method:"POST",body:JSON.stringify({speed,live})});
-    inform(live ? "Live test started; original light state will be restored when stopped." : "Simulation preview started.");
     await updatePreview();
+    // The run is controlled at the bottom of the page, but visualized at the
+    // top. Return to the graph; the floating strip keeps Stop and progress
+    // visible without requiring another scroll.
+    $("daily-profile-panel").scrollIntoView({
+      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+      block: "start"
+    });
   } catch(e) { inform(e.message,true); }
 });
-$("preview-stop").addEventListener("click", async () => {
+async function stopPreview() {
+  $("preview-dock-stop").disabled = true;
   try { await request("/api/preview/stop", {method:"POST"}); await updatePreview(); inform("Preview stopped; restoration attempted."); }
   catch(e) { inform(e.message,true); }
-});
+  finally { $("preview-dock-stop").disabled = !currentPreview?.active; }
+}
+$("preview-stop").addEventListener("click", stopPreview);
+$("preview-dock-stop").addEventListener("click", stopPreview);
 updatePreview();
 setInterval(updatePreview, 1000);
 
@@ -248,7 +264,7 @@ function renderDailyChart(data) {
   const wx = x(boundaries.wake);
   svgNode(svg,"line",{x1:wx,y1:T,x2:wx,y2:T+PH,stroke:"#5b6570","stroke-width":1.4,"stroke-dasharray":"3 4"});
   if (!boundaries.sunrise || Math.abs(x(boundaries.sunrise)-wx) > 98) {
-    svgNode(svg,"text",{x:Math.max(L+28,Math.min(L+PW-28,wx)),y:17,"text-anchor":"middle",...txt},"Wake");
+    svgNode(svg,"text",{x:Math.max(L+28,Math.min(L+PW-28,wx)),y:17,"text-anchor":"middle",...txt},"Peak");
   }
   // Current time and accelerated-test time share the same dynamic marker.
   svgNode(svg,"line",{id:"chart-playhead",x1:L,y1:T,x2:L,y2:T+PH,stroke:"#657681","stroke-width":2,"stroke-dasharray":"2 5",visibility:"hidden"});
@@ -430,9 +446,21 @@ function renderAnnual(profile) {
   const svg=$("annual-chart"); svg.replaceChildren();
   const view=$("annual-view").value;
   const values=profile.points;
-  const timeMinute=iso=> iso ? Number(iso.slice(11,13))*60+Number(iso.slice(14,16)) : null;
-  const series = values.map(p=>view==="time"?{a:timeMinute(p.sunrise),b:timeMinute(p.target)}:{a:null,b:p.advance_minutes});
-  const all=series.flatMap(p=>[p.a,p.b]).filter(v=>v!==null && Number.isFinite(v));
+  // Keep preceding/following calendar days on the clock axis when an offset
+  // moves artificial dawn across midnight. Otherwise 23:00 yesterday would
+  // incorrectly plot as later than 08:00 today.
+  const timeMinute=(iso,day)=>iso ?
+    (Date.parse(`${iso.slice(0,10)}T00:00:00Z`)-Date.parse(`${day}T00:00:00Z`))/60000 +
+    Number(iso.slice(11,13))*60+Number(iso.slice(14,16)) : null;
+  const axisClock=minutes=>{
+    const offset=Math.floor(minutes/1440);
+    const dayMinute=((Math.round(minutes)%1440)+1440)%1440;
+    return `${offset<0?"−1d ":offset>0?`+${offset}d `:""}${minutesClock(dayMinute)}`;
+  };
+  const series = values.map(p=>view==="time"
+    ? {a:timeMinute(p.sunrise,p.day),b:timeMinute(p.target,p.day),c:timeMinute(p.effective,p.day)}
+    : {a:null,b:p.advance_minutes,c:p.effective_advance_minutes});
+  const all=series.flatMap(p=>[p.a,p.b,p.c]).filter(v=>v!==null && Number.isFinite(v));
   if(!all.length){$("annual-error").hidden=false;$("annual-error").textContent="No available astronomical sunrise values.";return;}
   let ymin=Math.min(...all), ymax=Math.max(...all);
   if(view==="advance") {ymin=Math.min(0,ymin);ymax=Math.max(0,ymax);}
@@ -447,7 +475,7 @@ function renderAnnual(profile) {
   for(let i=0;i<=5;i++) {
     const v=ymin+(ymax-ymin)*i/5, yy=y(v);
     svgNode(svg,"line",{x1:ANNUAL_L,x2:ANNUAL_L+PW,y1:yy,y2:yy,stroke:"#e4e8eb"});
-    svgNode(svg,"text",{x:ANNUAL_L-10,y:yy+4,"text-anchor":"end",...txt},view==="time"?minutesClock(Math.max(0,Math.round(v))):`${Math.round(v)}m`);
+    svgNode(svg,"text",{x:ANNUAL_L-10,y:yy+4,"text-anchor":"end",...txt},view==="time"?axisClock(v):`${Math.round(v)}m`);
   }
   if(view==="advance" && ymin<=0 && ymax>=0) {
     svgNode(svg,"line",{x1:ANNUAL_L,x2:ANNUAL_L+PW,y1:y(0),y2:y(0),stroke:"#7e8a90","stroke-dasharray":"4 4"});
@@ -459,7 +487,7 @@ function renderAnnual(profile) {
     svgNode(svg,"line",{x1:xx,y1:ANNUAL_T,x2:xx,y2:ANNUAL_T+PH,stroke:"#edf0f2"});
     svgNode(svg,"text",{x:xx,y:ANNUAL_H-15,"text-anchor":"middle",...txt},new Date(`${date}T12:00:00Z`).toLocaleDateString(undefined,{month:"short",timeZone:"UTC"}));
   }
-  function line(which,color,dashed=false) {
+  function line(which,color,pattern=null) {
     let path="",drawing=false;
     series.forEach((v,i)=>{
       const n=v[which];
@@ -467,10 +495,16 @@ function renderAnnual(profile) {
       path+=`${drawing?" L":" M"}${x(i).toFixed(2)},${y(n).toFixed(2)}`;
       drawing=true;
     });
-    svgNode(svg,"path",{d:path,stroke:color,"stroke-width":2.5,fill:"none",...(dashed?{"stroke-dasharray":"6 5"}:{})});
+    svgNode(svg,"path",{d:path,stroke:color,
+      "stroke-width":which==="c"?3.5:2.5,fill:"none",
+      ...(pattern?{"stroke-dasharray":pattern}:{}),
+      ...(which==="c"?{"stroke-linecap":"round"}:{})});
   }
-  if(view==="time")line("a","#5087a3",true);
+  if(view==="time")line("a","#5087a3","6 5");
   line("b","#a7793d");
+  // Dotted overlay allows real and artificial lines to remain identifiable
+  // where the effective (earlier) time coincides with either one.
+  line("c","#386c5d","1 7");
   // Anchors are marked; edits are made in the table to avoid accidental schedule changes.
   if($("schedule_mode").value==="seasonal") {
     for(const anchor of readSeasonalPoints()){
@@ -488,12 +522,14 @@ function renderAnnual(profile) {
     const idx=Math.max(0,Math.min(values.length-1,Math.round((px-ANNUAL_L)/PW*(values.length-1))));
     cursor.setAttribute("x1",x(idx));cursor.setAttribute("x2",x(idx));cursor.setAttribute("visibility","visible");
     const p=values[idx];
-    readout.textContent=`${p.day} · Real ${p.sunrise?chartClock(p.sunrise):"none"} · Target ${chartClock(p.target)} · ${p.advance_minutes===null?"offset unavailable":(p.advance_minutes>=0?"+":"")+p.advance_minutes+" min earlier"}`;
+    const clockWithDate=iso=>!iso?"none":chartClock(iso)+(iso.slice(0,10)<p.day?" (previous day)":iso.slice(0,10)>p.day?" (next day)":"");
+    readout.textContent=`${p.day} · Real ${clockWithDate(p.sunrise)} · Artificial ${clockWithDate(p.target)} · Effective ${clockWithDate(p.effective)} · ${p.advance_minutes===null?"offset unavailable":(p.advance_minutes>=0?"+":"")+p.advance_minutes+" min earlier"}`;
   });
   hit.addEventListener("pointerleave",()=>{cursor.setAttribute("visibility","hidden");readout.textContent=`${profile.year} · ${profile.schedule_mode} mode`;});
   $("annual-real-legend").hidden=view!=="time";
   $("annual-target-legend").hidden=view!=="time";
   $("annual-advance-legend").hidden=view!=="advance";
+  $("annual-effective-label").textContent=view==="time"?"Effective sunrise":"Effective advancement (≥ 0)";
   svg.setAttribute("aria-label",`Annual ${view==="time"?"sunrise times":"advance from real sunrise"} for ${profile.year}`);
 }
 async function loadAnnual() {

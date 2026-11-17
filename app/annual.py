@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta, time
 
-from .model import Settings, local_sunrise, target_time, SeasonalPoint
+from .model import Settings, local_sunrise, target_time, SeasonalPoint, in_utc
 from zoneinfo import ZoneInfo
 
 
@@ -15,11 +15,17 @@ def annual_profile(settings: Settings, year: int) -> dict:
     while day.year == year:
         solar = local_sunrise(settings, day)
         target, status, advance = target_time(settings, day, solar)
+        # The effective sunrise is the earlier of astronomical sunrise and
+        # the artificial full-brightness target. If sunrise is unavailable,
+        # only the artificial target can be displayed.
+        effective = min((solar, target), key=in_utc) if solar is not None else target
         points.append({
             "day": day.isoformat(),
             "sunrise": solar.isoformat() if solar else None,
             "target": target.isoformat(),
+            "effective": effective.isoformat(),
             "advance_minutes": advance,
+            "effective_advance_minutes": max(0, advance) if advance is not None else None,
             "target_status": status,
         })
         day += timedelta(days=1)
