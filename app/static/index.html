@@ -11,22 +11,49 @@
   <main class="shell">
     <header>
       <div>
-        <p class="eyebrow">Bedroom lighting</p>
+        <p class="eyebrow">Daylight control</p>
         <h1>Solarwake</h1>
-        <p class="muted">A sunrise alarm that stays on until daylight arrives.</p>
+        <p class="muted">A configurable sunrise and daylight-normalization controller.</p>
       </div>
       <span id="phase-badge" class="status-chip">Loading</span>
     </header>
 
     <section class="panel" aria-labelledby="schedule-title">
       <div class="section-head">
-        <h2 id="schedule-title">Alarm schedule</h2>
+        <h2 id="schedule-title">Lighting schedule</h2>
         <span class="muted small">All times use your configured timezone</span>
       </div>
       <form id="settings-form">
         <div class="layout-two">
           <div>
-            <label for="wake_time">Wake-up time</label>
+            <label for="schedule_mode">Lighting mode</label>
+            <select id="schedule_mode">
+              <option value="fixed">Fixed time · Wake-up lighting</option>
+              <option value="natural">Natural · Sunrise enhancement</option>
+              <option value="seasonal">Seasonal · Daylight normalization</option>
+            </select>
+          </div>
+          <div id="natural-options" hidden>
+            <label for="natural_advance_minutes">Advance before real sunrise (minutes)</label>
+            <input id="natural_advance_minutes" type="number" min="-720" max="720" step="1">
+          </div>
+        </div>
+        <p id="mode-help" class="muted small"></p>
+        <div id="seasonal-options" class="seasonal-options" hidden>
+          <div class="section-head"><h3>Seasonal control points</h3><span class="muted small">Repeats every calendar year</span></div>
+          <label for="seasonal_basis">Set seasonal targets by</label>
+          <select id="seasonal_basis">
+            <option value="advance">Advancement relative to sunrise (minutes)</option>
+            <option value="time">Target local sunrise time</option>
+          </select>
+          <p class="muted small">Positive advancement means earlier light. Changing the editing basis converts the control points using the reference year selected below. The curves between points may change slightly; review the annual graph before saving.</p>
+          <div class="seasonal-point-list" id="seasonal-points"></div>
+          <button type="button" id="seasonal-add" class="quiet">+ Add control point</button>
+          <p class="muted small">Use dates in MM-DD format, e.g. 12-15. The curve is smoothly interpolated across New Year. Select a year in the annual graph to preview the exact resulting schedule.</p>
+        </div>
+        <div class="layout-two">
+          <div>
+            <label id="wake-time-label" for="wake_time">Full-brightness time</label>
             <input id="wake_time" type="time" required>
           </div>
           <div>
@@ -95,7 +122,7 @@
           <p class="muted small">Location defaults to an example coordinate in central Vancouver. Set your own approximate location for sunrise calculations. The app does not use live weather or indoor sensors.</p>
         </details>
         <div class="form-actions">
-          <label class="enabled"><input id="enabled" type="checkbox"> Enable daily alarm</label>
+          <label class="enabled"><input id="enabled" type="checkbox"> Enable lighting schedule</label>
           <button class="primary" type="submit">Save settings</button>
         </div>
       </form>
@@ -121,11 +148,40 @@
       <div class="chart-legend">
         <span><i class="legend-line artificial"></i> Requested brightness</span>
         <span><i class="legend-line astronomical"></i> Actual sunrise</span>
-        <span><i class="legend-line clock"></i> Current time</span>
+        <span><i class="legend-line clock"></i> Current time / virtual test time</span>
       </div>
       <p id="chart-readout" class="chart-readout muted small" role="status">Select a day to display its planned sunrise.</p>
       <p id="chart-note" class="muted small">The graph uses saved settings. E80S brightness appears to have approximately 20 physical steps.</p>
       <p id="chart-error" class="error small" hidden></p>
+    </section>
+
+    <section class="panel" aria-labelledby="annual-title">
+      <div class="section-head chart-heading">
+        <div>
+          <h2 id="annual-title">Annual sunrise schedule</h2>
+          <p class="muted small">Compare astronomical sunrise with artificial full-brightness time. Unsaved edits are previewed here.</p>
+        </div>
+        <div class="chart-date-tools">
+          <label class="visually-hidden" for="annual-view">Graph view</label>
+          <select id="annual-view" aria-label="Annual graph view">
+            <option value="time">Sunrise clock time</option>
+            <option value="advance">Advancement / deviation</option>
+          </select>
+          <label class="visually-hidden" for="annual-year">Reference year</label>
+          <input type="number" id="annual-year" min="2000" max="2100" step="1" aria-label="Reference year">
+        </div>
+      </div>
+      <div class="chart-frame">
+        <svg id="annual-chart" class="daily-chart" viewBox="0 0 840 310" role="img" aria-label="Annual sunrise-time graph"></svg>
+      </div>
+      <div class="chart-legend">
+        <span id="annual-real-legend"><i class="legend-line astronomical"></i> Real sunrise</span>
+        <span id="annual-target-legend"><i class="legend-line artificial"></i> Artificial sunrise</span>
+        <span id="annual-advance-legend" hidden><i class="legend-line artificial"></i> Earlier (+) / later (−)</span>
+      </div>
+      <p id="annual-readout" class="chart-readout muted small" role="status">Select an annual view.</p>
+      <p class="muted small">Control points are edited in Lighting schedule, above. This chart is a calculation only; it never turns on a light. Clock times use the selected location's timezone.</p>
+      <p id="annual-error" class="error small" hidden></p>
     </section>
 
     <section class="panel" aria-labelledby="upcoming-title">
@@ -135,33 +191,33 @@
       </div>
       <dl class="schedule" id="schedule-values">
         <div><dt>Ramp starts</dt><dd id="s-ramp">—</dd></div>
-        <div><dt>Wake-up</dt><dd id="s-wake">—</dd></div>
+        <div><dt>Artificial sunrise (full brightness)</dt><dd id="s-wake">—</dd></div>
         <div><dt>Actual sunrise</dt><dd id="s-sunrise">—</dd></div>
         <div><dt>Begin fade-out</dt><dd id="s-fade">—</dd></div>
         <div><dt>Lights off</dt><dd id="s-end">—</dd></div>
       </dl>
       <p id="runtime-note" class="muted small">Checking schedule…</p>
       <p id="error-note" class="error small" hidden></p>
-      <button id="skip" type="button" class="danger">Stop / skip today's alarm</button>
+      <button id="skip" type="button" class="danger">Stop / skip this cycle</button>
     </section>
 
     <section class="panel" aria-labelledby="preview-title">
       <div class="section-head"><h2 id="preview-title">Accelerated test run</h2><span class="muted small">Uses current saved ramp and fade settings</span></div>
-      <p class="muted small">Preview runs the ramp, a 2-minute simulated hold, then the fade. It does not change the daily schedule or wait for actual sunrise.</p>
+      <p class="muted small">Preview runs the ramp, a 2-minute simulated hold, then the fade. It does not change the saved lighting schedule or wait for real sunrise. On the daily graph, its playhead tracks a virtual clock along the plotted phases.</p>
       <div class="layout-two">
         <div><label for="preview-speed">Speed</label><select id="preview-speed"><option value="1">1× (real time)</option><option value="5">5×</option><option value="10" selected>10×</option><option value="30">30×</option><option value="60">60×</option></select></div>
         <div><label>Current preview</label><p id="preview-status" class="preview-status">Idle</p></div>
       </div>
       <div class="preview-track" role="progressbar" aria-label="Preview progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="preview-progress"><div id="preview-fill"></div></div>
       <label class="enabled preview-live"><input type="checkbox" id="preview-live"> Drive the actual E80S light</label>
-      <p class="muted small">Live mode requires the daily alarm to be disabled. At high speeds, device updates may be skipped, delayed, or appear abrupt. A stopped or completed preview attempts to restore the light's previous power and brightness. Unexpected behaviour is possible; keep the physical controls available.</p>
+      <p class="muted small">Live mode requires the lighting schedule to be disabled. At high speeds, device updates may be skipped, delayed, or appear abrupt. A stopped or completed preview attempts to restore the light's previous power and brightness. Unexpected behaviour is possible; keep the physical controls available.</p>
       <div class="buttons"><button id="preview-start" type="button" class="primary">Start preview</button><button id="preview-stop" type="button" disabled>Stop and restore</button></div>
       <p id="preview-error" class="error small" hidden></p>
     </section>
     <section class="panel" aria-labelledby="device-title">
       <div class="section-head">
         <h2 id="device-title">Device check</h2>
-        <span class="muted small">Only available when alarm is disabled</span>
+        <span class="muted small">Available when schedule is disabled</span>
       </div>
       <p id="device-status" class="muted small">Device not checked.</p>
       <div class="buttons">

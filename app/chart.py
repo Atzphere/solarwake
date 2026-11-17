@@ -53,7 +53,8 @@ def chart_for_day(settings: Settings, day: date, *, sunrise_override=None,
     return {
         "day": day.isoformat(),
         "scheduled_weekday": day.weekday() in settings.weekdays,
-        "alarm_enabled": settings.enabled,
+        "schedule_enabled": settings.enabled,
+        "alarm_enabled": settings.enabled,  # Legacy UI/API alias
         "timezone": settings.timezone,
         "schedule": schedule_to_dict(schedule),
         "start": start.astimezone(tz).isoformat(),

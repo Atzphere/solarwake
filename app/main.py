@@ -16,6 +16,7 @@ from pydantic import BaseModel
 from .device import DeviceError, HomeAssistantLight
 from .model import Settings
 from .chart import chart_for_day
+from .annual import annual_profile, converted_points
 from .scheduler import Scheduler
 from .preview import Preview
 from .storage import Store
@@ -68,7 +69,7 @@ async def get_settings():
 @app.put("/api/settings")
 async def put_settings(settings: Settings):
     if preview.active():
-        raise HTTPException(status_code=409, detail="Stop the preview before changing alarm settings")
+        raise HTTPException(status_code=409, detail="Stop the preview before changing lighting settings")
     try:
         await scheduler.apply_settings(settings)
     except DeviceError as exc:
@@ -83,11 +84,41 @@ async def status():
 
 @app.get("/api/chart")
 async def chart(day: date | None = None):
-    """Daily planned curve, including when the alarm is disabled. No side effects."""
+    """Daily planned curve, including when lighting is disabled. No side effects."""
     settings = store.settings
     if day is None:
         day = datetime.now(ZoneInfo(settings.timezone)).date()
     return chart_for_day(settings, day)
+
+
+class AnnualRequest(BaseModel):
+    year: int
+    settings: Settings
+
+
+@app.post("/api/year/preview")
+async def annual_preview(query: AnnualRequest):
+    """Preview unsaved schedule edits, with no device commands or state writes."""
+    try:
+        return annual_profile(query.settings, query.year)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+class ConvertRequest(BaseModel):
+    year: int
+    basis: str
+    settings: Settings
+
+
+@app.post("/api/seasonal/convert")
+async def seasonal_convert(query: ConvertRequest):
+    try:
+        points = converted_points(query.settings, query.basis, query.year)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return {"basis": query.basis, "year": query.year,
+            "points": [p.model_dump() for p in points]}
 
 
 @app.get("/api/device")

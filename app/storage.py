@@ -12,7 +12,7 @@ class Store:
         self.settings_path = self.directory / "settings.json"
         self.state_path = self.directory / "runtime.json"
         self.settings = (Settings.model_validate_json(self.settings_path.read_text())
-                         if self.settings_path.exists() else Settings())
+                         if self.settings_path.exists() else Settings(schedule_mode="natural"))
         self.runtime = (json.loads(self.state_path.read_text()) if self.state_path.exists()
                         else {"last_run": None, "last_phase": None,
                               "last_pct": None, "last_sent_at": None,

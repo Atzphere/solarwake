@@ -1,4 +1,4 @@
-"""Separate, non-persistent sunrise test runner. Never changes the real alarm schedule."""
+"""Separate, non-persistent sunrise test runner. Never changes the saved lighting schedule."""
 from __future__ import annotations
 
 import asyncio
@@ -44,7 +44,7 @@ class Preview:
         if self.active():
             raise ValueError("A preview is already running")
         if live and self.store.settings.enabled:
-            raise ValueError("Disable and save the real alarm before driving the light")
+            raise ValueError("Disable and save the lighting schedule before driving the light")
         self._restore = None
         if live:
             state = await self.device.get_state(self.store.settings.entity_id)
@@ -114,7 +114,7 @@ class Preview:
                 self.pct = self._target(self.elapsed)
                 if self.live and self.pct != last_sent:
                     if self.store.settings.enabled:
-                        raise RuntimeError("Real alarm was enabled during live preview")
+                        raise RuntimeError("Lighting schedule was enabled during live preview")
                     if self.pct:
                         await self.device.set_brightness(entity, self.pct)
                     else:

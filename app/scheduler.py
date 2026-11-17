@@ -28,7 +28,8 @@ class Scheduler:
     def _select(self, now: datetime):
         settings = self.store.settings
         local = now.astimezone(ZoneInfo(settings.timezone))
-        for day in (local.date(), local.date() - timedelta(days=1)):
+        for day in (local.date() - timedelta(days=1), local.date(),
+                    local.date() + timedelta(days=1)):
             if day.weekday() not in settings.weekdays:
                 continue
             sched = day_schedule(settings, day)
@@ -118,7 +119,7 @@ class Scheduler:
                     await self._off_owned()
                 except Exception as exc:
                     self.last_error = str(exc)
-                    LOG.warning("Disabled alarm, but could not turn light off: %s", exc)
+                    LOG.warning("Disabled lighting schedule, but could not turn light off: %s", exc)
                 return
             if settings.entity_id != prior.entity_id and self.store.runtime.get("last_phase") in ACTIVE:
                 # Avoid orphaning an active lamp on an old entity ID.
@@ -148,7 +149,7 @@ class Scheduler:
     async def manual_test(self, pct: int | None):
         async with self.lock:
             if self.store.settings.enabled:
-                raise ValueError("Disable the alarm before using manual light tests")
+                raise ValueError("Disable the lighting schedule before using manual light tests")
             if pct is None:
                 await self.device.turn_off(self.store.settings.entity_id)
             else:

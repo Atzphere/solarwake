@@ -6,9 +6,38 @@ from datetime import date, datetime, time, timedelta, timezone
 from typing import Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from .seasonal import day_number, interpolate
 
 UTC = timezone.utc
+
+
+class SeasonalPoint(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    month_day: str
+    value: int  # advance minutes, or local clock minutes since midnight
+
+    @field_validator("month_day")
+    @classmethod
+    def valid_day(cls, value: str) -> str:
+        try:
+            month, day = map(int, value.split("-"))
+            if value != f"{month:02d}-{day:02d}":
+                raise ValueError()
+            date(2001, month, day)  # Feb 29 excluded; interpolation still works on leap days.
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Use MM-DD (except Feb 29)") from exc
+        return value
+
+
+DEFAULT_POINTS = [
+    SeasonalPoint(month_day="01-01", value=90),
+    SeasonalPoint(month_day="04-01", value=20),
+    SeasonalPoint(month_day="06-21", value=0),
+    SeasonalPoint(month_day="09-01", value=0),
+    SeasonalPoint(month_day="12-01", value=90),
+]
 
 
 class Settings(BaseModel):
@@ -21,6 +50,12 @@ class Settings(BaseModel):
     longitude: float = Field(default=-123.1207, ge=-180, le=180)
     timezone: str = "America/Vancouver"
     wake_time: str = "07:00"
+    # Default fixed is intentional for legacy settings.json migration: upgrades
+    # must not silently change the timing of an already enabled alarm.
+    schedule_mode: Literal["fixed", "natural", "seasonal"] = "fixed"
+    natural_advance_minutes: int = Field(default=30, ge=-720, le=720)
+    seasonal_basis: Literal["advance", "time"] = "advance"
+    seasonal_points: list[SeasonalPoint] = Field(default_factory=lambda: [p.model_copy() for p in DEFAULT_POINTS])
     weekdays: list[int] = Field(default_factory=lambda: list(range(7)))  # Monday=0
     ramp_minutes: int = Field(default=30, ge=1, le=180)
     sunrise_offset_minutes: int = Field(default=20, ge=-60, le=180)
@@ -59,15 +94,32 @@ class Settings(BaseModel):
             raise ValueError("Duplicate weekdays are not allowed")
         return sorted(value)
 
+    @model_validator(mode="after")
+    def valid_seasonal_points(self):
+        pts = self.seasonal_points
+        if not 2 <= len(pts) <= 24:
+            raise ValueError("Use between 2 and 24 seasonal control points")
+        dates = [p.month_day for p in pts]
+        if len(set(dates)) != len(dates):
+            raise ValueError("Seasonal control dates must be unique")
+        low, high = (-720, 720) if self.seasonal_basis == "advance" else (0, 1439)
+        if any(not low <= p.value <= high for p in pts):
+            raise ValueError(f"Seasonal values must be between {low} and {high}")
+        self.seasonal_points = sorted(pts, key=lambda p: p.month_day)
+        return self
+
 
 class DaySchedule(BaseModel):
     day: date
     ramp_start: datetime
-    wake: datetime
+    wake: datetime  # Historical field: target artificial-sunrise completion
     sunrise: datetime | None
     fade_start: datetime
     fade_end: datetime
     sunrise_status: Literal["calculated", "unavailable"]
+    schedule_mode: Literal["fixed", "natural", "seasonal"]
+    target_status: Literal["calculated", "fallback", "clock"]
+    advance_minutes: int | None
 
 
 def local_sunrise(settings: Settings, day: date) -> datetime | None:
@@ -87,11 +139,37 @@ def local_sunrise(settings: Settings, day: date) -> datetime | None:
         return None
 
 
+def target_time(settings: Settings, day: date, sunrise_time: datetime | None) -> tuple[datetime, str, int | None]:
+    """Time at which artificial sunrise is fully bright, separate from handoff."""
+    tz = ZoneInfo(settings.timezone)
+    fixed = datetime.combine(day, time.fromisoformat(settings.wake_time), tzinfo=tz)
+    if settings.schedule_mode == "fixed":
+        advance = round((sunrise_time - fixed).total_seconds()/60) if sunrise_time else None
+        return fixed, "clock", advance
+
+    if settings.schedule_mode == "natural":
+        if sunrise_time is None:
+            return fixed, "fallback", None
+        advance = settings.natural_advance_minutes
+        return sunrise_time - timedelta(minutes=advance), "calculated", advance
+
+    curve = [(day_number(date(2001, int(p.month_day[:2]), int(p.month_day[3:]))), p.value)
+             for p in settings.seasonal_points]
+    value = round(interpolate(curve, day))
+    if settings.seasonal_basis == "time":
+        target = datetime.combine(day, time(value//60,value%60), tzinfo=tz)
+        advance = round((sunrise_time-target).total_seconds()/60) if sunrise_time else None
+        return target, "clock", advance
+    if sunrise_time is None:
+        return fixed, "fallback", None
+    return sunrise_time-timedelta(minutes=value), "calculated", value
+
+
 def day_schedule(settings: Settings, day: date, sunrise_override: datetime | None = None,
                  *, use_override: bool = False) -> DaySchedule:
     tz = ZoneInfo(settings.timezone)
-    wake = datetime.combine(day, time.fromisoformat(settings.wake_time), tzinfo=tz)
     sunrise_time = sunrise_override if use_override else local_sunrise(settings, day)
+    wake, target_status, advance = target_time(settings, day, sunrise_time)
     ramp_start = wake - timedelta(minutes=settings.ramp_minutes)
     hold_cap = wake + timedelta(minutes=settings.maximum_hold_minutes)
     target = (sunrise_time + timedelta(minutes=settings.sunrise_offset_minutes)
@@ -105,6 +183,9 @@ def day_schedule(settings: Settings, day: date, sunrise_override: datetime | Non
         fade_start=fade_start,
         fade_end=fade_start + timedelta(minutes=settings.fade_minutes),
         sunrise_status="calculated" if sunrise_time is not None else "unavailable",
+        schedule_mode=settings.schedule_mode,
+        target_status=target_status,
+        advance_minutes=advance,
     )
 
 
@@ -140,9 +221,13 @@ def schedule_to_dict(schedule: DaySchedule) -> dict:
     return {
         "day": schedule.day.isoformat(),
         "ramp_start": schedule.ramp_start.isoformat(),
-        "wake": schedule.wake.isoformat(),
+        "wake": schedule.wake.isoformat(),  # Legacy API field
+        "target_full_brightness": schedule.wake.isoformat(),
         "sunrise": schedule.sunrise.isoformat() if schedule.sunrise else None,
         "fade_start": schedule.fade_start.isoformat(),
         "fade_end": schedule.fade_end.isoformat(),
         "sunrise_status": schedule.sunrise_status,
+        "schedule_mode": schedule.schedule_mode,
+        "target_status": schedule.target_status,
+        "advance_minutes": schedule.advance_minutes,
     }

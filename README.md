@@ -1,6 +1,6 @@
-# Solarwake — minimal sunrise alarm
+# Solarwake — scheduled sunrise and daylight normalization
 
-A small, Python-based sunrise light controller. It uses **Home Assistant** as the
+A small, Python-based morning-light controller. It uses **Home Assistant** as the
 light-control layer, **Astral** to calculate your actual local sunrise, and a
 plain, server-hosted web UI. No Node/React build step. All times are calculated
 server-side and schedules continue when the browser is closed.
@@ -8,7 +8,7 @@ server-side and schedules continue when the browser is closed.
 ## What it does
 
 - Ramps `light.e80s_id` (or another dimmable Home Assistant light) from a
-  configurable minimum to 100%, reaching maximum brightness at wake-up time.
+  configurable minimum to 100%, reaching maximum brightness at the scheduled target time.
 - Holds it at full brightness until **local sunrise + an offset** (20 minutes by
   default), capped at a configurable maximum hold time.
 - Fades out and sends `light.turn_off` once the fade completes.
@@ -53,19 +53,19 @@ address.
 
 4. Open `http://192.168.1.71:8765/` (replace with your chosen BIND_IP).
 5. Verify E80S is **physically set to warm-white mode**, and not its hardware
-   sunrise alarm mode. Click **Check connection**; with the alarm disabled,
+   sunrise alarm mode. Click **Check connection**; with the lighting schedule disabled,
    click **Test light at 10%**, then **Turn light off**.
-6. Confirm the timezone, approximate location, wake time and selected days.
-   Enable the alarm and **Save settings**.
+6. Confirm the timezone, approximate location, lighting mode and selected days.
+   Enable the lighting schedule and **Save settings**.
 
 For the first few mornings, keep a conventional alarm as a backup until this
 has demonstrated reliable operation for your device and environment.
 
 ### Testing a ramp during the day
 
-Disable the alarm and save, then set the wake time 3–5 minutes in the future,
-set the ramp duration to 2 minutes, and re-enable the alarm. If the day's
-sunrise was earlier, fade begins at the chosen wake time; this is expected.
+Disable the lighting schedule and save, then set the wake time 3–5 minutes in the future,
+set the ramp duration to 2 minutes, and re-enable the lighting schedule. If the day's
+sunrise was earlier, fade begins at the chosen target time; this is expected.
 After the test, restore your real schedule.
 
 ### Important operational notes
@@ -84,7 +84,7 @@ After the test, restore your real schedule.
 - The **Stop / skip** button turns the light off and suppresses this scheduled
   run. Manual physical switching is **not automatically recognized as an
   override** in this MVP; use Stop/skip to pause the app for the morning.
-- With the alarm enabled, the app may join the current scheduled ramp/hold
+- With the lighting schedule enabled, the app may join the current scheduled ramp/hold
   immediately if the current time lies inside that window. Disable before
   running a manual light test.
 - Calculated sunrise uses the standard unobstructed-horizon definition; it
@@ -138,26 +138,25 @@ A dedicated **Accelerated test run** panel allows 1×, 5×, 10×, 30× or 60×
 playback of the **saved** ramp, followed by a two-minute simulated hold and
 then the saved fade. Preview does not modify the schedule or use actual sunrise.
 It runs in simulation-only mode unless **Drive the actual E80S light** is
-explicitly checked and confirmed. Live mode requires saving the alarm disabled.
+explicitly checked and confirmed. Live mode requires saving the lighting schedule disabled.
 Home Assistant commands are limited to one attempt every two seconds. Higher
 speeds can skip steps or make the light jump abruptly.
 
 Live preview snapshots the light's power and brightness before starting and
 **attempts** to restore those values on stop or completion. A network or server
 failure can prevent restoration, so the result is not guaranteed. Keep the
-physical light controls available and avoid testing during a real alarm.
+physical light controls available and avoid testing during a real sunrise run.
 Preview progress is volatile and is not resumed after process restarts.
 
-Future work: three scheduling modes (natural, fixed and seasonal compensation),
-a yearly control-point curve with an annual impact graph, and phase-trigger
-interpolation. These are deliberately not part of this test-run update.
+Future work: astronomical ramp duration, sensor-aware handoff, phase-trigger
+interpolation, and optional weather modulation for more capable lights.
 
 ## Daily light-profile chart (v0.3)
 
 The **Daily light profile** panel visualizes a selected calendar day, including
 its actual astronomical sunrise, planned ramp, hold, and fade. Choose a day with
 the calendar picker or use the previous/next day buttons. It remains available
-when the alarm is disabled and on unselected weekdays as a *planning preview*;
+when the schedule is disabled and on unselected weekdays as a *planning preview*;
 viewing a date never changes your settings or controls the light.
 
 The `/api/chart?day=YYYY-MM-DD` endpoint samples the **same** Python
@@ -173,21 +172,43 @@ those clock values directly, to avoid stale browser timezone databases under
 B.C.'s 2026 permanent UTC−7 rules. The endpoint uses the currently *saved*
 settings; unsaved edits will not appear until **Save settings**.
 
-## Planned scheduling and daylight enhancements (not implemented)
 
-- **Seasonal sunrise targets:** an annual editor with two interchangeable
-  presentations of the *same* schedule: an absolute artificial-sunrise-time
-  curve, and an advance/delay-in-minutes curve relative to real sunrise.
-  Editing either should update the other and show the real astronomical times.
-- **Weather-modulated handoff:** initially retain the real-sunrise anchor, but
-  optionally extend the hold or slow the fade using available cloudiness or
-  (preferably) forecast solar irradiance. Forecast cloud fraction alone is not
-  a reliable room-brightness measurement. Handle missing/stale forecast data
-  with a deterministic astronomy-only fallback; avoid abrupt brightness jumps.
-- **Sensor-driven handoff:** later supplement the forecast with a local
-  illuminance sensor and hysteresis, while maintaining a maximum hold limit.
-- **Phase events:** emit single-shot triggers at configurable elapsed-time or
-  brightness percentages through each sunrise phase, with restart-safe IDs.
+## Scheduling modes and annual control points (v0.4)
 
-These capabilities should remain opt-in and must not block the alarm if any
-external weather API or light sensor becomes unavailable.
+Solarwake is a **daylight-normalization tool**, not an audible alarm. Its modes:
+
+- **Natural — Sunrise enhancement:** use the real sunrise time at the configured
+  location, plus a fixed signed advancement. A positive advancement starts and
+  finishes artificial sunrise earlier. A negative one delays it.
+- **Fixed — Wake-up lighting:** bring the light to full brightness at a chosen
+  local clock time. This is the only explicitly alarm-style mode, but Solarwake
+  does not play sounds or replace a conventional alarm.
+- **Seasonal — Daylight normalization:** choose 2–24 date/target control points,
+  repeated each year and joined smoothly using a periodic, shape-preserving
+  cubic interpolation. Positive advancement means earlier simulated sunrise.
+  Alternatively edit target local clock times directly.
+
+The year graph can independently display **sunrise time** (real and simulated)
+or **signed advancement**. Switching the underlying editing basis converts
+anchor values based on the selected *reference year*; values between anchors
+may shift slightly, so inspect the graph before saving. Annual graphing
+previews unsaved edits and does not change the active schedule.
+
+These modes change **when the artificial sunrise reaches full brightness**.
+They do *not* control sunset, add weather adaptation, or lengthen artificial
+light throughout the day. All modes retain the original sunrise-based hold
+and fade policy (and its maximum-hold cap).
+
+Existing installations with a settings file missing `schedule_mode` migrate
+to **fixed** mode, retaining the prior wake time. Fresh installations default
+to **natural** mode. Existing `wake_time`/`wake` API keys are kept for backward
+compatibility, although UI wording now says “target/full-brightness time.”
+
+The accelerated test playhead also follows the daily chart: it maps the
+preview ramp, its synthetic two-minute hold, and the fade to the corresponding
+segments of the actual scheduled profile. This is a **virtual position**, not
+the current wall-clock time, and does not affect the planned schedule.
+
+Deployment: unzip the incremental update into your existing checkout and run
+`docker compose up -d --build`. No Compose, Caddy, secret or Docker volume
+changes are required. Keep a backup audio alarm while assessing reliability.
