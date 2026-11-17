@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Solarwake</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/app.js" defer></script>
+</head>
+<body>
+  <main class="shell">
+    <header>
+      <div>
+        <p class="eyebrow">Bedroom lighting</p>
+        <h1>Solarwake</h1>
+        <p class="muted">A sunrise alarm that stays on until daylight arrives.</p>
+      </div>
+      <span id="phase-badge" class="status-chip">Loading</span>
+    </header>
+
+    <section class="panel" aria-labelledby="schedule-title">
+      <div class="section-head">
+        <h2 id="schedule-title">Alarm schedule</h2>
+        <span class="muted small">All times use your configured timezone</span>
+      </div>
+      <form id="settings-form">
+        <div class="layout-two">
+          <div>
+            <label for="wake_time">Wake-up time</label>
+            <input id="wake_time" type="time" required>
+          </div>
+          <div>
+            <label for="ramp_minutes">Warm-up duration (minutes)</label>
+            <input id="ramp_minutes" type="number" min="1" max="180" required>
+          </div>
+        </div>
+        <fieldset class="days">
+          <legend>Repeat on</legend>
+          <div class="day-row">
+            <label><input type="checkbox" name="weekday" value="0"> Mon</label>
+            <label><input type="checkbox" name="weekday" value="1"> Tue</label>
+            <label><input type="checkbox" name="weekday" value="2"> Wed</label>
+            <label><input type="checkbox" name="weekday" value="3"> Thu</label>
+            <label><input type="checkbox" name="weekday" value="4"> Fri</label>
+            <label><input type="checkbox" name="weekday" value="5"> Sat</label>
+            <label><input type="checkbox" name="weekday" value="6"> Sun</label>
+          </div>
+        </fieldset>
+        <div class="layout-two">
+          <div>
+            <label for="sunrise_offset_minutes">Hold until after sunrise (minutes)</label>
+            <input id="sunrise_offset_minutes" type="number" min="-60" max="180" required>
+          </div>
+          <div>
+            <label for="fade_minutes">Fade-out duration (minutes)</label>
+            <input id="fade_minutes" type="number" min="0" max="120" required>
+          </div>
+        </div>
+        <details>
+          <summary>Advanced settings</summary>
+          <div class="advanced-grid">
+            <div>
+              <label for="entity_id">Home Assistant light entity</label>
+              <input id="entity_id" type="text" spellcheck="false" required>
+            </div>
+            <div>
+              <label for="timezone">Timezone</label>
+              <input id="timezone" type="text" spellcheck="false" required>
+            </div>
+            <div>
+              <label for="latitude">Latitude</label>
+              <input id="latitude" type="number" step="any" min="-89.9" max="89.9" required>
+            </div>
+            <div>
+              <label for="longitude">Longitude</label>
+              <input id="longitude" type="number" step="any" min="-180" max="180" required>
+            </div>
+            <div>
+              <label for="maximum_hold_minutes">Maximum hold (minutes)</label>
+              <input id="maximum_hold_minutes" type="number" min="1" max="720" required>
+            </div>
+            <div>
+              <label for="gamma">Ramp curve exponent</label>
+              <input id="gamma" type="number" step="0.1" min="0.5" max="5" required>
+            </div>
+            <div>
+              <label for="minimum_brightness_pct">Minimum brightness (%)</label>
+              <input id="minimum_brightness_pct" type="number" min="1" max="30" required>
+            </div>
+            <div>
+              <label for="update_seconds">Update interval (seconds)</label>
+              <input id="update_seconds" type="number" min="2" max="60" required>
+            </div>
+          </div>
+          <p class="muted small">Location defaults to an example coordinate in central Vancouver. Set your own approximate location for sunrise calculations. The app does not use live weather or indoor sensors.</p>
+        </details>
+        <div class="form-actions">
+          <label class="enabled"><input id="enabled" type="checkbox"> Enable daily alarm</label>
+          <button class="primary" type="submit">Save settings</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="panel" aria-labelledby="upcoming-title">
+      <div class="section-head">
+        <h2 id="upcoming-title">Next sunrise</h2>
+        <button class="quiet" id="refresh" type="button">Refresh</button>
+      </div>
+      <dl class="schedule" id="schedule-values">
+        <div><dt>Ramp starts</dt><dd id="s-ramp">—</dd></div>
+        <div><dt>Wake-up</dt><dd id="s-wake">—</dd></div>
+        <div><dt>Actual sunrise</dt><dd id="s-sunrise">—</dd></div>
+        <div><dt>Begin fade-out</dt><dd id="s-fade">—</dd></div>
+        <div><dt>Lights off</dt><dd id="s-end">—</dd></div>
+      </dl>
+      <p id="runtime-note" class="muted small">Checking schedule…</p>
+      <p id="error-note" class="error small" hidden></p>
+      <button id="skip" type="button" class="danger">Stop / skip today's alarm</button>
+    </section>
+
+    <section class="panel" aria-labelledby="device-title">
+      <div class="section-head">
+        <h2 id="device-title">Device check</h2>
+        <span class="muted small">Only available when alarm is disabled</span>
+      </div>
+      <p id="device-status" class="muted small">Device not checked.</p>
+      <div class="buttons">
+        <button id="check-device" type="button">Check connection</button>
+        <button id="test-on" type="button">Test light at 10%</button>
+        <button id="test-off" type="button">Turn light off</button>
+      </div>
+    </section>
+    <footer>Local-only control · Home Assistant handles device communication · No cloud service</footer>
+  </main>
+  <div role="status" id="notice" class="notice" hidden></div>
+</body>
+</html>
