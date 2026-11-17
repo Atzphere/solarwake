@@ -3,15 +3,23 @@ services:
     build: .
     container_name: solarwake
     restart: unless-stopped
+
     env_file: .env
     environment:
       DATA_DIR: /data
-    ports:
-      - "${BIND_IP:-127.0.0.1}:8765:8080"
+
     volumes:
       - solarwake_data:/data
+
+    networks:
+      - caddy-internal
+
     security_opt:
       - no-new-privileges:true
 
 volumes:
   solarwake_data:
+
+networks:
+  caddy-internal:
+    external: true
