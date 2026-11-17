@@ -101,6 +101,33 @@
       </form>
     </section>
 
+    <section class="panel" aria-labelledby="chart-title">
+      <div class="section-head chart-heading">
+        <div>
+          <h2 id="chart-title">Daily light profile</h2>
+          <p class="muted small">Planned output from the saved schedule, not measured illumination</p>
+        </div>
+        <div class="chart-date-tools">
+          <button type="button" id="chart-prev" aria-label="Previous day" title="Previous day">‹</button>
+          <label class="visually-hidden" for="chart-day">Chart date</label>
+          <input id="chart-day" type="date" aria-label="Chart date">
+          <button type="button" id="chart-next" aria-label="Next day" title="Next day">›</button>
+          <button type="button" id="chart-today" class="quiet">Today</button>
+        </div>
+      </div>
+      <div class="chart-frame">
+        <svg id="daily-chart" class="daily-chart" viewBox="0 0 840 310" role="img" aria-label="Daily light schedule brightness curve"></svg>
+      </div>
+      <div class="chart-legend">
+        <span><i class="legend-line artificial"></i> Requested brightness</span>
+        <span><i class="legend-line astronomical"></i> Actual sunrise</span>
+        <span><i class="legend-line clock"></i> Current time</span>
+      </div>
+      <p id="chart-readout" class="chart-readout muted small" role="status">Select a day to display its planned sunrise.</p>
+      <p id="chart-note" class="muted small">The graph uses saved settings. E80S brightness appears to have approximately 20 physical steps.</p>
+      <p id="chart-error" class="error small" hidden></p>
+    </section>
+
     <section class="panel" aria-labelledby="upcoming-title">
       <div class="section-head">
         <h2 id="upcoming-title">Next sunrise</h2>
@@ -118,6 +145,19 @@
       <button id="skip" type="button" class="danger">Stop / skip today's alarm</button>
     </section>
 
+    <section class="panel" aria-labelledby="preview-title">
+      <div class="section-head"><h2 id="preview-title">Accelerated test run</h2><span class="muted small">Uses current saved ramp and fade settings</span></div>
+      <p class="muted small">Preview runs the ramp, a 2-minute simulated hold, then the fade. It does not change the daily schedule or wait for actual sunrise.</p>
+      <div class="layout-two">
+        <div><label for="preview-speed">Speed</label><select id="preview-speed"><option value="1">1× (real time)</option><option value="5">5×</option><option value="10" selected>10×</option><option value="30">30×</option><option value="60">60×</option></select></div>
+        <div><label>Current preview</label><p id="preview-status" class="preview-status">Idle</p></div>
+      </div>
+      <div class="preview-track" role="progressbar" aria-label="Preview progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="preview-progress"><div id="preview-fill"></div></div>
+      <label class="enabled preview-live"><input type="checkbox" id="preview-live"> Drive the actual E80S light</label>
+      <p class="muted small">Live mode requires the daily alarm to be disabled. At high speeds, device updates may be skipped, delayed, or appear abrupt. A stopped or completed preview attempts to restore the light's previous power and brightness. Unexpected behaviour is possible; keep the physical controls available.</p>
+      <div class="buttons"><button id="preview-start" type="button" class="primary">Start preview</button><button id="preview-stop" type="button" disabled>Stop and restore</button></div>
+      <p id="preview-error" class="error small" hidden></p>
+    </section>
     <section class="panel" aria-labelledby="device-title">
       <div class="section-head">
         <h2 id="device-title">Device check</h2>

@@ -131,3 +131,63 @@ python -m unittest discover -s tests -v
 The MVP only supports **one brightness-controlled light**. Multiple lights,
 colour calibration, weather, ambience sensors and simulated seasons are not
 implemented yet.
+
+## Accelerated test runs (next iteration)
+
+A dedicated **Accelerated test run** panel allows 1×, 5×, 10×, 30× or 60×
+playback of the **saved** ramp, followed by a two-minute simulated hold and
+then the saved fade. Preview does not modify the schedule or use actual sunrise.
+It runs in simulation-only mode unless **Drive the actual E80S light** is
+explicitly checked and confirmed. Live mode requires saving the alarm disabled.
+Home Assistant commands are limited to one attempt every two seconds. Higher
+speeds can skip steps or make the light jump abruptly.
+
+Live preview snapshots the light's power and brightness before starting and
+**attempts** to restore those values on stop or completion. A network or server
+failure can prevent restoration, so the result is not guaranteed. Keep the
+physical light controls available and avoid testing during a real alarm.
+Preview progress is volatile and is not resumed after process restarts.
+
+Future work: three scheduling modes (natural, fixed and seasonal compensation),
+a yearly control-point curve with an annual impact graph, and phase-trigger
+interpolation. These are deliberately not part of this test-run update.
+
+## Daily light-profile chart (v0.3)
+
+The **Daily light profile** panel visualizes a selected calendar day, including
+its actual astronomical sunrise, planned ramp, hold, and fade. Choose a day with
+the calendar picker or use the previous/next day buttons. It remains available
+when the alarm is disabled and on unselected weekdays as a *planning preview*;
+viewing a date never changes your settings or controls the light.
+
+The `/api/chart?day=YYYY-MM-DD` endpoint samples the **same** Python
+`phase_and_brightness` implementation as the live scheduler, including minimum
+brightness, gamma, maximum-hold cap, and the final turn-off. It has no side
+effects and adds no dependencies. The plot depicts commanded brightness, not
+measured lux; although the E80S appears to have ~20 physical brightness steps,
+there is no device-calibrated quantization model yet. The real sunrise marker
+is independent of the artificial wake-up and might occur before or after it.
+
+All graph timestamps are returned with their local UTC offset and the UI shows
+those clock values directly, to avoid stale browser timezone databases under
+B.C.'s 2026 permanent UTC−7 rules. The endpoint uses the currently *saved*
+settings; unsaved edits will not appear until **Save settings**.
+
+## Planned scheduling and daylight enhancements (not implemented)
+
+- **Seasonal sunrise targets:** an annual editor with two interchangeable
+  presentations of the *same* schedule: an absolute artificial-sunrise-time
+  curve, and an advance/delay-in-minutes curve relative to real sunrise.
+  Editing either should update the other and show the real astronomical times.
+- **Weather-modulated handoff:** initially retain the real-sunrise anchor, but
+  optionally extend the hold or slow the fade using available cloudiness or
+  (preferably) forecast solar irradiance. Forecast cloud fraction alone is not
+  a reliable room-brightness measurement. Handle missing/stale forecast data
+  with a deterministic astronomy-only fallback; avoid abrupt brightness jumps.
+- **Sensor-driven handoff:** later supplement the forecast with a local
+  illuminance sensor and hysteresis, while maintaining a maximum hold limit.
+- **Phase events:** emit single-shot triggers at configurable elapsed-time or
+  brightness percentages through each sunrise phase, with restart-safe IDs.
+
+These capabilities should remain opt-in and must not block the alarm if any
+external weather API or light sensor becomes unavailable.
